@@ -34,6 +34,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from torch.distributed.optim import ZeroRedundancyOptimizer
 import torch.distributed as dist
+import typing as T
 
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
@@ -384,7 +385,7 @@ class GPT(nn.Module):
 # Our own simple Distributed Data Loader
 
 
-def _peek_data_shard(filename):
+def _peek_data_shard(filename: str) -> int:
     # only reads the header, returns header data
     with open(filename, "rb") as f:
         # first read the header, which is 256 int32 integers (4 bytes each)
@@ -404,7 +405,7 @@ def _peek_data_shard(filename):
     return ntok  # for now just return the number of tokens
 
 
-def _load_data_shard(filename):
+def _load_data_shard(filename: str) -> T.List[int]:
     with open(filename, "rb") as f:
         # first read the header, which is 256 int32 integers (4 bytes each)
         header = np.frombuffer(f.read(256 * 4), dtype=np.int32)
@@ -418,7 +419,14 @@ def _load_data_shard(filename):
 
 
 class DistributedDataLoader:
-    def __init__(self, filename_pattern, B, T, process_rank, num_processes):
+    def __init__(
+        self,
+        filename_pattern: str,
+        B: int,
+        T: int,
+        process_rank: int,
+        num_processes: int,
+    ):
         self.process_rank = process_rank
         self.num_processes = num_processes
         self.B = B
@@ -434,7 +442,7 @@ class DistributedDataLoader:
         ntok_total = 0
         for fname in self.files:
             shard_ntok = _peek_data_shard(fname)
-            assert shard_ntok >= num_processes * B * T + 1
+            assert shard_ntok >= num_processes * B * T + 1  # + 1 to load targets
             ntok_total += shard_ntok
         self.ntok_total = ntok_total
         print0(
@@ -458,7 +466,7 @@ class DistributedDataLoader:
         self.current_position = self.process_rank * self.B * self.T
         self.tokens = _load_data_shard(self.files[self.current_shard])
 
-    def next_batch(self):
+    def next_batch(self) -> T.Tuple[torch.Tensor, torch.Tensor]:
         B = self.B
         T = self.T
         buf = self.tokens[self.current_position : self.current_position + B * T + 1]
@@ -468,6 +476,7 @@ class DistributedDataLoader:
         # advance the start pointer in current shard
         self.current_position += B * T * self.num_processes
         # if loading the next batch would be out of bounds advance the shard
+        # TODO: Will tokens always get discarded that are at the end of a shard?
         if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
             self.advance()
         return x, y
@@ -787,7 +796,7 @@ if __name__ == "__main__":
         "gpt2-medium",
         "gpt2-large",
         "gpt2-xl",
-        "d12",
+        "d12",  # TODO: What are d* models?
         "d24",
         "d36",
         "d48",

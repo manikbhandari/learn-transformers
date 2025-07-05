@@ -40,7 +40,7 @@ def download():
         print(f"{data_filename} already exists, skipping download...")
 
 
-def tokenize(model_desc):
+def tokenize(model_desc: str):
     if model_desc == "gpt-2":
         enc = tiktoken.get_encoding("gpt2")
         encode = lambda s: enc.encode_ordinary(s)

@@ -6,9 +6,10 @@ Common utilities for the datasets
 import requests
 from tqdm import tqdm
 import numpy as np
+import typing as T
 
 
-def download_file(url: str, fname: str, chunk_size=1024):
+def download_file(url: str, fname: str, chunk_size: int = 1024):
     """Helper function to download a file from a given url"""
     resp = requests.get(url, stream=True)
     total = int(resp.headers.get("content-length", 0))
@@ -33,7 +34,7 @@ HEADERS_INFO = {
 }
 
 
-def write_datafile(filename, toks, model_desc="gpt-2"):
+def write_datafile(filename: str, toks: T.List[int], model_desc="gpt-2"):
     """
     Saves token data as a .bin file, for reading in C.
     - First comes a header with 256 int32s.
