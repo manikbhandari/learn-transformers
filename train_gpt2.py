@@ -11,10 +11,10 @@ https://github.com/huggingface/transformers/blob/main/src/transformers/models/gp
 
 Example launches to only benchmark the speed of bfloat16 compiled GPU training:
 1 GPU:
-python train_gpt2.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
+python train_gpt2.py --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
 you can also turn on flash-attention by appending --flash=1
 4 GPU:
-torchrun --standalone --nproc_per_node=4 train_gpt2.py --write_tensors=0 --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
+torchrun --standalone --nproc_per_node=4 train_gpt2.py --num_iterations=50 --sequence_length=1024 --compile=1 --tensorcores=1 --dtype=bfloat16
 """
 
 import os
@@ -120,6 +120,7 @@ class MLP(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        # og trf: 512 X 2048
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd)
         self.gelu = NewGELU()
         self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd)
@@ -142,6 +143,7 @@ class Block(nn.Module):
         self.mlp = MLP(config)
 
     def forward(self, x):
+        # Notice layer norm applied to input of attention
         x = x + self.attn(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
         return x
@@ -536,8 +538,6 @@ if __name__ == "__main__":
     parser.add_argument("--flash",              type=int,   default=0, help="use flash attention")
     parser.add_argument("--dtype",              type=str,   default="float32", help="float32|float16|bfloat16")
     parser.add_argument("--zero_stage",         type=int,   default=0, help="zero redundancy optimizer stage (0/1/2/3)",)
-    # python -> C bridge
-    parser.add_argument("--write_tensors",      type=int,   default=1, help="write tensors to disk")
     args = parser.parse_args()
 
     # args error checking and convenience variables
