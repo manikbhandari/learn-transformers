@@ -75,6 +75,8 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         # not really a 'bias', more of a mask, but following the OpenAI/HF naming though
+        # TODO: Why does this need to be registered as a buffer and not simply a tensor?
+        # TODO: i.e. why not self.bias = torch.tril.....
         self.register_buffer(
             "bias",
             torch.tril(torch.ones(config.block_size, config.block_size)).view(
@@ -178,6 +180,7 @@ class GPT(nn.Module):
         )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.lm_head.LLMC_SKIP_INIT = 1  # don't init this one, we will tie weights
+        # TODO: shouldn't this be lm_head.weight = wte.weight? Are they equivalent?
         self.transformer.wte.weight = (
             self.lm_head.weight
         )  # https://paperswithcode.com/method/weight-tying
@@ -201,6 +204,7 @@ class GPT(nn.Module):
                 torch.nn.init.normal_(
                     module.weight, mean=0.0, std=std, generator=self.init_rng
                 )
+            # Initialize biases of the linear layer to zero
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
@@ -227,6 +231,7 @@ class GPT(nn.Module):
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
+            # TODO: is ignore index needed?
             logits = self.lm_head(x)
             loss = F.cross_entropy(
                 logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1
@@ -366,15 +371,17 @@ class GPT(nn.Module):
                 else idx[:, -self.config.block_size :]
             )
             # forward the model to get the logits for the index in the sequence
-            logits, _ = self(idx_cond)
+            logits, _ = self(idx_cond)  # B X T X n_vocab
             # pluck the logits at the final step and scale by desired temperature
+            # B X n_vocab  since you took the last timestep slice
             logits = logits[:, -1, :] / temperature
             # optionally crop the logits to only the top k options
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                # Take the smallest of the topk, preserve dimensions: v[:, [-1]] is of shape (B X 1), not (B,)
                 logits[logits < v[:, [-1]]] = -float("Inf")
             # apply softmax to convert logits to (normalized) probabilities
-            probs = F.softmax(logits, dim=-1)
+            probs = F.softmax(logits, dim=-1)  # B X n_vocab
             # sample from the distribution
             idx_next = torch.multinomial(probs, num_samples=1)
             # append sampled index to the running sequence and continue
@@ -748,9 +755,10 @@ if __name__ == "__main__":
             # before we end, let's also do one round of inference
             # we'll kick off the generation with "<|endoftext|>", which designates the start of a new sequence
             start_ids = [enc.eot_token]
-            xg = torch.tensor(start_ids, dtype=torch.long, device=device)[
-                None, ...
-            ]  # TODO: What is this [None, ...] ?
+            xg = torch.tensor(start_ids, dtype=torch.long, device=device)
+            # xg[None] adds a new dimension at the front
+            # xg[...] picks all remaining dimensions. It's a shorthand for xg[:, :] (howsoever many dimensions)
+            xg = xg[None, ...]  # TODO: What is this [None, ...] ?
             max_new_tokens = 32
             temperature = 1.0
             top_k = 40
