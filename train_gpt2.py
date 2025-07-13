@@ -22,6 +22,8 @@ import math
 import glob
 import struct
 import inspect
+
+# TODO: What is a python context?
 from contextlib import nullcontext
 from dataclasses import dataclass
 
@@ -75,8 +77,11 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         # not really a 'bias', more of a mask, but following the OpenAI/HF naming though
-        # TODO: Why does this need to be registered as a buffer and not simply a tensor?
-        # TODO: i.e. why not self.bias = torch.tril.....
+        # Why does this need to be registered as a buffer and not simply a tensor?
+        # i.e. why not self.bias = torch.tril.....
+        # Because we want to mark as untrainable so model.parameters() won't return this
+        # But we still want it saved in the state dict so that we can load it later on.
+        # e.g. for batchnorm we want running_mean after training completes
         self.register_buffer(
             "bias",
             torch.tril(torch.ones(config.block_size, config.block_size)).view(
@@ -180,7 +185,14 @@ class GPT(nn.Module):
         )
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.lm_head.LLMC_SKIP_INIT = 1  # don't init this one, we will tie weights
-        # TODO: shouldn't this be lm_head.weight = wte.weight? Are they equivalent?
+        # shouldn't this be lm_head.weight = wte.weight? Are they equivalent?
+        # The order makes no difference.
+        # Feel free to try with the below line instead
+        # self.lm_head.weight = self.transformer.wte.weight
+        # It makes no difference because this is equivalent to:
+        # wte.wt points to a tensor pointed by lm_head.wt.
+        # Now init the tensor pointed to by the variable wte.wt
+
         self.transformer.wte.weight = (
             self.lm_head.weight
         )  # https://paperswithcode.com/method/weight-tying
@@ -231,11 +243,11 @@ class GPT(nn.Module):
 
         if targets is not None:
             # if we are given some desired targets also calculate the loss
-            # TODO: is ignore index needed?
+            # is ignore index needed?
+            # No, default value is -100 and targets are never < 0  for us anyway
             logits = self.lm_head(x)
-            loss = F.cross_entropy(
-                logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1
-            )
+            # CE input: B*T X n_vocab, targets: B*T
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1))
         else:
             # inference-time mini-optimization: only forward the lm_head on the very last position
             logits = self.lm_head(
@@ -598,13 +610,14 @@ if __name__ == "__main__":
     print0(f"total desired batch size: {args.total_batch_size}")
     print0(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 
-    # TODO: Why do we need this?
     # set up a context manager following the desired dtype and device
     ptdtype = {
         "float32": torch.float32,
         "bfloat16": torch.bfloat16,
         "float16": torch.float16,
     }[args.dtype]
+    # amp = automatic mixed precision. It will try to automatically cast to ptdtype when possible
+    # Needed for mixed precision training
     ctx = (
         torch.amp.autocast(device_type=device_type, dtype=ptdtype)
         if device_type == "cuda"
@@ -616,9 +629,12 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
 
-    # TODO: What are tensorcores?
     # set the torch precision mode to use TensorFloat32 (TF32) for matmuls
     # docs https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html
+    # What are tensorcores?
+    # In A100 GPUs, TF32 mode increases throughput wihtout affecting precision because they
+    # use "tensorcores": https://blogs.nvidia.com/blog/tensorfloat-32-precision-format/
+
     if args.tensorcores:
         torch.set_float32_matmul_precision("high")
 
@@ -756,9 +772,9 @@ if __name__ == "__main__":
             # we'll kick off the generation with "<|endoftext|>", which designates the start of a new sequence
             start_ids = [enc.eot_token]
             xg = torch.tensor(start_ids, dtype=torch.long, device=device)
-            # xg[None] adds a new dimension at the front
+            # xg[None] adds a new dimension at the front. It's equivalent to xg.unsqueeze(0)
             # xg[...] picks all remaining dimensions. It's a shorthand for xg[:, :] (howsoever many dimensions)
-            xg = xg[None, ...]  # TODO: What is this [None, ...] ?
+            xg = xg[None, ...]
             max_new_tokens = 32
             temperature = 1.0
             top_k = 40
@@ -790,8 +806,18 @@ if __name__ == "__main__":
             x, y = x.to(device), y.to(device)
             if ddp:
                 # we want only the last micro-step to sync grads in a DDP model
-                # the official way to do this is with model.no_sync(), but that is a  # TODO: What is model.no_sync() ?
+                # the official way to do this is with model.no_sync(), but that is a
                 # context manager that bloats the code, so we just toggle this variable
+                # # What is model.no_sync() ?
+                # model.no_sync() would make sure that when you call backward() grads wouldn't sync
+                # then outside of model.no_sync() you can call backward() to sync the grads
+                # if micro_step < grad_accum_steps - 1:
+                #       with model.no_sync():
+                #           loss = model(x, y)
+                #           loss.backward()
+                # else:
+                #       loss = model(x, y)
+                #       loss.backward()  # This will sync the grads
                 model.require_backward_grad_sync = micro_step == grad_accum_steps - 1
             # forward pass
             with ctx:
@@ -801,18 +827,17 @@ if __name__ == "__main__":
                 # addition of gradients corresponds to a SUM in the objective, but
                 # instead of a SUM we want MEAN, so we scale the loss here
                 loss = loss / grad_accum_steps
-                lossf += (
-                    loss.detach()
-                )  # keep track of the mean loss  # TODO: What does detach do?
+                # detach will remove it from the computation graph (no grads)
+                lossf += loss.detach()  # keep track of the mean loss
             # backward pass
             if not args.inference_only:
                 loss.backward()
         if ddp:
             dist.all_reduce(lossf, op=dist.ReduceOp.AVG)
-        lossf = lossf.item()
-        norm = torch.nn.utils.clip_grad_norm_(
-            model.parameters(), args.grad_clip
-        )  # TODO: Outputs pre-clipping norm or post clipping norm?
+        lossf = lossf.item()  # Take the scalar value out
+        # Outputs pre-clipping norm or post clipping norm?
+        # Outputs pre_clippig norm as seen from the logs the values are > 1 even tough grad_clip is set to 1
+        norm = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         # determine and set the learning rate for this iteration
         lr = get_lr(step)
         for param_group in optimizer.param_groups:
