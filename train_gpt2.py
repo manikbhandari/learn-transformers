@@ -23,7 +23,8 @@ import glob
 import struct
 import inspect
 
-# TODO: What is a python context?
+# Used for closing resources automatically like when opening a file
+# Any class that defines __enter__() and __close__() can be used for this
 from contextlib import nullcontext
 from dataclasses import dataclass
 
@@ -36,7 +37,8 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 from torch.distributed.optim import ZeroRedundancyOptimizer
 import torch.distributed as dist
-import typing as T
+from typing import Tuple
+from numpy.typing import NDArray
 
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
@@ -426,7 +428,7 @@ def _peek_data_shard(filename: str) -> int:
     return ntok  # for now just return the number of tokens
 
 
-def _load_data_shard(filename: str) -> T.List[int]:
+def _load_data_shard(filename: str) -> NDArray:
     with open(filename, "rb") as f:
         # first read the header, which is 256 int32 integers (4 bytes each)
         header = np.frombuffer(f.read(256 * 4), dtype=np.int32)
@@ -487,7 +489,7 @@ class DistributedDataLoader:
         self.current_position = self.process_rank * self.B * self.T
         self.tokens = _load_data_shard(self.files[self.current_shard])
 
-    def next_batch(self) -> T.Tuple[torch.Tensor, torch.Tensor]:
+    def next_batch(self) -> Tuple[torch.Tensor, torch.Tensor]:
         B = self.B
         T = self.T
         buf = self.tokens[self.current_position : self.current_position + B * T + 1]
@@ -560,7 +562,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # args error checking and convenience variables
-    B, T = args.batch_size, args.sequence_length
+    B: int = args.batch_size
+    T: int = args.sequence_length
     assert 1 <= T <= 1024
     assert args.dtype in {"float32", "float16", "bfloat16"}
     assert args.model in { "gpt2",  "gpt2-medium", "gpt2-large", "gpt2-xl", "dnano", "d12", "d24", "d36", "d48"}
@@ -694,7 +697,7 @@ if __name__ == "__main__":
     # here we wrap model into DDP container
     if ddp:
         model = DDP(model, device_ids=[ddp_local_rank])
-    raw_model = (
+    raw_model: GPT = (
         model.module if ddp else model
     )  # always contains the "raw" unwrapped model
 
@@ -799,7 +802,8 @@ if __name__ == "__main__":
         if args.overfit_one_batch:
             train_loader.reset()
         # micro-batch loop where we do gradient accumulation to reach desired total batch size
-        lossf = 0.0  # for getting the mean loss (as simple float) over the accumulation steps
+        # for getting the mean loss (as simple float) over the accumulation steps
+        lossf = 0.0
         for micro_step in range(grad_accum_steps):
             # fetch a batch
             x, y = train_loader.next_batch()
