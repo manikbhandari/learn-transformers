@@ -1,7 +1,7 @@
 """
 Based on https://github.com/karpathy/llm.c/blob/master/train_gpt2.py
+
 Reference code for GPT-2 training and inference.
-Will save the model weights into files, to be read from C as initialization.
 
 References:
 1) the official GPT-2 TensorFlow implementation released by OpenAI:
