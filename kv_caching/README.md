@@ -45,7 +45,7 @@ See [kv_caching_comparison.py](https://github.com/manikbhandari/learn-transforme
 
 ## Log
 ```
-➜  python kv_caching/kv_caching_comparison.py
+python kv_caching/kv_caching_comparison.py
 TOKEN_IDS=[0, 1, 2, 3, 4, 5, 3, 6, 7, 8]
 self.in_embed.weight.shape=torch.Size([9, 16])
 self.pos_embed.weight.shape=torch.Size([50, 16])
