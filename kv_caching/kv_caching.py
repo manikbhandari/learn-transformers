@@ -227,14 +227,14 @@ if __name__ == "__main__":
     optimizer = torch.optim.AdamW(param_groups, lr=LR)
 
     model.train()
-    N_STEPS = 1000 if not DEBUG else 1
+    N_STEPS = 5000 if not DEBUG else 1
     for step in range(N_STEPS):
         model.zero_grad(None)
         preds = model(input_seq)
 
         loss = F.cross_entropy(preds, targets)
 
-        if (step + 1) % 100 == 0:
+        if (step + 1) % 1000 == 0:
             print(f"step: {step} | loss: {loss.data:.4f}")
 
         loss.backward()
