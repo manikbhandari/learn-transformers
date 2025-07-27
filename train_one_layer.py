@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import pdb
 
 
-DEBUG = True
+DEBUG = False
 
 def print0(s):
     if DEBUG:
@@ -132,7 +132,7 @@ class BasicTokenizer:
 
 if __name__ == "__main__":
     tokenizer = BasicTokenizer()
-    DATA = "Hello, world. I'm trying to learn how to build a transformer. transformer is a great tool world."
+    DATA = "Hello, world. trying to learn how to build a transformer."
     assert DATA == tokenizer.detokenize(tokenizer.tokenize(DATA))
 
     TOKEN_IDS = tokenizer.tokenize(s=DATA)
@@ -150,7 +150,19 @@ if __name__ == "__main__":
     for param in model.named_parameters():
         print(param[0], param[1].shape)
     print("-" * 80)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+
+    # don't do weight decay on layer norm and biases
+    decay_params = [param for param in model.parameters() if len(param.shape) >= 2]
+    non_decay_params = [param for param in model.parameters() if len(param.shape) < 2]
+    assert all([param.requires_grad for param in decay_params])
+    assert all([param.requires_grad for param in non_decay_params])
+    n_total_params = sum(param.numel() for param in decay_params + non_decay_params)
+    print(f"{n_total_params=}")
+    param_groups = [
+        {"params": decay_params, "weight_decay": 0.01},
+        {"params": non_decay_params, "weight_decay": 0}
+    ] 
+    optimizer = torch.optim.AdamW(param_groups, lr=LR)
 
     model.train()
     N_STEPS = 10_000 if not DEBUG else 1
