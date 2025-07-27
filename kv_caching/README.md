@@ -41,7 +41,7 @@ tokenizer.detokenize(output_tokens)='Hello, world. trying world. trying world. a
 ```
 
 # Comparison with uncached inference
-See [kv_caching_comparison.py]() to compare the time taken for cached vs uncached implementation. The cachec implementation is about 3X faster.
+See [kv_caching_comparison.py](https://github.com/manikbhandari/learn-transformers/blob/main/kv_caching/kv_caching_comparison.py) to compare the time taken for cached vs uncached implementation. The cachec implementation is about 3X faster.
 
 ## Log
 ```
