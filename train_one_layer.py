@@ -13,9 +13,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-DEBUG = False
+DEBUG = True
 
-def print0(s):
+def printd(s):
     if DEBUG:
         print(s)
 
@@ -45,62 +45,62 @@ class GPTOneLayer(nn.Module):
         self.lm_head.weight = self.in_embed.weight
 
     def forward(self, token_ids):
-        print0(f"{token_ids.shape=}")
+        printd(f"{token_ids.shape=}")
 
         x = self.in_embed(token_ids)
-        print0(f"{x.shape=}")
+        printd(f"{x.shape=}")
 
         pos = torch.arange(x.shape[0])
-        print0(f"{pos.shape=}")
+        printd(f"{pos.shape=}")
         pos_embed = self.pos_embed(pos)
-        print0(f"{pos_embed.shape=}")
+        printd(f"{pos_embed.shape=}")
         x += pos_embed
 
         q = self.wq(x)
-        print0(f"{q.shape=}")
+        printd(f"{q.shape=}")
         q = q.view(-1, 8, q.shape[-1] // 8).transpose(0, 1)
-        print0(f"{q.shape=}")
+        printd(f"{q.shape=}")
 
         k = self.wk(x)
-        print0(f"{k.shape=}")
+        printd(f"{k.shape=}")
         k = k.view(-1, 8, k.shape[-1] // 8).transpose(0, 1)
-        print0(f"{k.shape=}")
+        printd(f"{k.shape=}")
 
         v = self.wv(x)
-        print0(f"{v.shape=}")
+        printd(f"{v.shape=}")
         v = v.view(-1, 8, v.shape[-1] // 8).transpose(0, 1)
-        print0(f"{v.shape=}")
+        printd(f"{v.shape=}")
 
         mha = torch.matmul(q, k.transpose(1, 2)) / math.sqrt(q.shape[-1])
-        print0(f"{mha.shape=}")
+        printd(f"{mha.shape=}")
 
         mask = self.mask[:mha.shape[1], :mha.shape[1]][None, ...]
-        print0(f"{mask.shape=}")
+        printd(f"{mask.shape=}")
 
         mha = torch.where(mask == 1, mha, float("-inf"))
-        print0(f"{mha.shape=}")
+        printd(f"{mha.shape=}")
 
         mha = F.softmax(mha, dim=-1)
-        print0(f"{mha[0, :3, :3]=}")
+        printd(f"{mha[0, :3, :3]=}")
 
         attn = torch.matmul(mha, v)
-        print0(f"{attn.shape=}")
+        printd(f"{attn.shape=}")
 
         attn_torch = F.scaled_dot_product_attention(q, k, v, is_causal=True)
-        print0(f"{attn_torch.shape=}")
+        printd(f"{attn_torch.shape=}")
         if DEBUG:
             assert torch.all(torch.isclose(attn_torch.data, attn.data))
 
         attn = attn.transpose(0, 1).contiguous().view(x.shape[0], -1)
-        print0(f"{attn.shape=}")
+        printd(f"{attn.shape=}")
 
         x = self.ln1(x + attn)
 
         x = self.mlp2(F.gelu(self.mlp1(x)))
-        print0(f"{x.shape=}")
+        printd(f"{x.shape=}")
 
         y = self.lm_head(x)
-        print0(f"{y.shape=}")
+        printd(f"{y.shape=}")
 
         return y
         
