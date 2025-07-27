@@ -2,7 +2,7 @@
 Trains a single transformer layer on a single sentence. 
 We verify that the implementation is good by 
     (1) checking that the trainig loss goes to 0 
-    (2) ensureing that the attention computed is exactly the same as pytorch's computation
+    (2) ensuring that the attention computed is exactly the same as pytorch's computation
 
 python train_one_layer.py
 
