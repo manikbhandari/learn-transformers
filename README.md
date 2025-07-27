@@ -8,13 +8,14 @@ See [train_one_layer.py](https://github.com/manikbhandari/learn-transformers/blo
 
 Debug log:
 ```
-➜  python train_one_layer.py                     
-TOKEN_IDS=[0, 1, 2, 3, 4, 5, 6, 4, 7, 8, 9, 10, 11, 8, 12, 13, 1]
-self.in_embed.weight.shape=torch.Size([14, 16])
+python train_one_layer.py                     
+
+TOKEN_IDS=[0, 1, 2, 3, 4, 5, 3, 6, 7, 8]
+self.in_embed.weight.shape=torch.Size([9, 16])
 self.pos_embed.weight.shape=torch.Size([50, 16])
-self.lm_head.weight.shape=torch.Size([14, 16])
+self.lm_head.weight.shape=torch.Size([9, 16])
 --------------------------------------------------------------------------------
-in_embed.weight torch.Size([14, 16])
+in_embed.weight torch.Size([9, 16])
 pos_embed.weight torch.Size([50, 16])
 wq.weight torch.Size([16, 16])
 wq.bias torch.Size([16])
@@ -29,26 +30,27 @@ mlp1.bias torch.Size([64])
 mlp2.weight torch.Size([16, 64])
 mlp2.bias torch.Size([16])
 --------------------------------------------------------------------------------
-token_ids.shape=torch.Size([16])
-x.shape=torch.Size([16, 16])
-pos.shape=torch.Size([16])
-pos_embed.shape=torch.Size([16, 16])
-q.shape=torch.Size([16, 16])
-q.shape=torch.Size([8, 16, 2])
-k.shape=torch.Size([16, 16])
-k.shape=torch.Size([8, 16, 2])
-v.shape=torch.Size([16, 16])
-v.shape=torch.Size([8, 16, 2])
-mha.shape=torch.Size([8, 16, 16])
-mask.shape=torch.Size([1, 16, 16])
-mha.shape=torch.Size([8, 16, 16])
+n_total_params=3920
+token_ids.shape=torch.Size([9])
+x.shape=torch.Size([9, 16])
+pos.shape=torch.Size([9])
+pos_embed.shape=torch.Size([9, 16])
+q.shape=torch.Size([9, 16])
+q.shape=torch.Size([8, 9, 2])
+k.shape=torch.Size([9, 16])
+k.shape=torch.Size([8, 9, 2])
+v.shape=torch.Size([9, 16])
+v.shape=torch.Size([8, 9, 2])
+mha.shape=torch.Size([8, 9, 9])
+mask.shape=torch.Size([1, 9, 9])
+mha.shape=torch.Size([8, 9, 9])
 mha[0, :3, :3]=tensor([[1.0000, 0.0000, 0.0000],
-        [0.4811, 0.5189, 0.0000],
-        [0.2927, 0.2839, 0.4234]], grad_fn=<SliceBackward0>)
-attn.shape=torch.Size([8, 16, 2])
-attn_torch.shape=torch.Size([8, 16, 2])
-attn.shape=torch.Size([16, 16])
-x.shape=torch.Size([16, 16])
-y.shape=torch.Size([16, 14])
-loss: 3.4841
+        [0.1869, 0.8131, 0.0000],
+        [0.1162, 0.7096, 0.1743]], grad_fn=<SliceBackward0>)
+attn.shape=torch.Size([8, 9, 2])
+attn_torch.shape=torch.Size([8, 9, 2])
+attn.shape=torch.Size([9, 16])
+x.shape=torch.Size([9, 16])
+y.shape=torch.Size([9, 9])
+loss: 1.8950
 ```
